@@ -36,6 +36,47 @@ get_stats <- function(years = c(2023, 2024)) {
 }
 
 
+# Runs through whole probability calculation for a player / statistic
+full_calc_pr <- function(results) {
+    emp_calc <- FALSE
+    cat("By considering past results for empirical calculation, enter '1'\n")
+    cat("Otherwise, by using distribution methods by considering:\n")
+    cat("multiple statistics of a single player, enter '2'\n")
+    cat("multiple players results of a single statistic, enter '3'\n")
+    option <- readline(prompt = "Enter command: ")
+
+    if (option == '1') {
+        emp_calc <- TRUE
+        calc_pr_emp(results)      
+    } else if (option == '2') {
+        moments <- get_player_stats(results)
+    } else if (option == '3') {
+        moments <- get_stat_for_players(results)
+    } else {
+        cat("Error, didn't recognise command", option, "Exiting...\n")
+        stop()
+    }
+
+    repeat {
+        if (emp_calc) {
+            break
+        }
+
+        dist <- readline(prompt = "For probability calculation, enter t for t distribution, or n for normal distribution: ")
+        if (dist == 't') {
+            calc_pr_t(moments)
+            break
+        } else if (dist == 'n') {
+            calc_pr_n(moments)
+            break
+        } else {
+            cat("Error: did not recognise distribution. Please try again\n")
+        }
+    }
+}
+
+
+
 # Takes 1 player name, and returns any wanted statistics
 get_player_stats <- function(player_stats) {
     # loop that retrives a player's stats
@@ -123,15 +164,7 @@ get_stat_for_players <- function(player_stats) {
             next
         }
 
-
-        # get stats for this player, then find mean and average and add it to our final result
-        selected_stats <- c("date", "player_last_name", stat_name)
-
-        # filter for first and last name
-        given_player_stats <- player_stats %>% 
-            filter(player_last_name == last_name) %>%
-            filter(player_first_name == first_name) %>%
-            select(all_of(selected_stats))
+        given_player_stats <- get_given_player_stats(player_stats, first_name, last_name, stat_name)
 
         # Get expectation and variance of stats
         averages <- colMeans(given_player_stats[ , -c(1,2)])
@@ -151,11 +184,29 @@ get_stat_for_players <- function(player_stats) {
 }
 
 
+# Returns all data related to a player and a given statistic
+get_given_player_stats <- function(player_stats, first_name, last_name, statistic) {
+    selected_stats <- c("date", "player_last_name", statistic)
+
+    # filter for first and last name
+    given_player_stats <- player_stats %>% 
+        filter(player_last_name == last_name) %>%
+        filter(player_first_name == first_name) %>%
+        select(all_of(selected_stats))
+
+    return(given_player_stats)
+}
+
+
 visualise <- function(player_stats) {
     # get data to be plotted
     first_name <- readline(prompt = "Enter first name: ")
     last_name <- readline(prompt = "Enter last name: ")
-    selected_stats <- c("date", "player_last_name")
+
+    if (!(any(player_stats$player_first_name == first_name) && any(player_stats$player_last_name == last_name))) {
+        cat("Error: Could not find player", first_name, last_name, "\n")
+        stop()
+    }
 
     repeat {
         stat_name <- readline(prompt = "Enter statistic ('help' for cmds): ")
@@ -163,18 +214,13 @@ visualise <- function(player_stats) {
         if (tolower(stat_name) == "help") {
             print(names(player_stats))
         } else if (stat_name %in% names(player_stats)) {
-            selected_stats <- c(selected_stats, stat_name)
             break
         } else {
             cat("Stat not found, try again\n")
         }
     }
 
-    # filter for last name
-    given_player_stats <- player_stats %>% 
-        filter(player_last_name == last_name) %>%
-        filter(player_first_name == first_name) %>%
-        select(all_of(selected_stats))
+    given_player_stats <- get_given_player_stats(player_stats, first_name, last_name, stat_name)
 
     ggplot(given_player_stats, aes_string(x = stat_name)) +
         geom_bar() +
@@ -244,33 +290,49 @@ calc_pr_n <- function(moments) {
     }
 }
 
-# Runs through whole probability calculation for a player
-full_calc_pr <- function(results) {
-    cat("For multiple statistics of a single player, enter '1'\n")
-    cat("For multiple players results of a single statistic, enter '2'\n")
-    option <- readline(prompt = "Enter command: ")
-    if (option == '1') {
-        moments <- get_player_stats(results)
-    } else if (option == '2') {
-        moments <- get_stat_for_players(results)
-    } else {
-        cat("Error, didn't recognise command", option, "Exiting...\n")
-        stop()
+# Performs an empirical probability calculation
+calc_pr_emp <- function(results) {
+    repeat {
+        stat <- readline(prompt = "Enter statistic of interest: ")
+        
+        if (!(stat %in% names(results))) {
+            cat("Could not find", stat, "Try again\n")
+            next
+        }
+
+        first_name <- readline(prompt = "Enter first name: ")
+        last_name <- readline(prompt = "Enter last name: ")
+
+        if (!(any(results$player_first_name == first_name) && any(results$player_last_name == last_name))) {
+            cat("Could not find player", first_name, last_name, "Try again\n")
+            next
+        }
+
+        given_player_stats <- get_given_player_stats(results, first_name, last_name, stat)
+
+        break
     }
+
+    print(given_player_stats)
+    
+    vector <- as.vector(given_player_stats[[stat]])
 
     repeat {
-        dist <- readline(prompt = "For probability calculation, enter t for t distribution, or n for normal distribution: ")
-        if (dist == 't') {
-            calc_pr_t(moments)
+        num <- readline(prompt = "Enter minimum value ('done' to exit): ")
+
+        if (tolower(num) == "done") {
             break
-        } else if (dist == 'n') {
-            calc_pr_n(moments)
-            break
-        } else {
-            cat("Error: did not recognise distribution. Please try again\n")
         }
+        
+
+        num <- as.integer(num)
+        total_count <- length(vector)
+        successes <- sum(vector >= num)
+        pr <- successes / total_count
+        odds <- pr^-1
+
+        cat("\nIn the past", total_count, "games,", last_name, "has exceeded", num, stat, successes,
+            "times.\nThus, empirical probability is", pr, "and fair odds are", odds, "\n\n")
+
     }
 }
-
-
-
