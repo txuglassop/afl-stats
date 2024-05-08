@@ -61,13 +61,23 @@ full_calc_pr <- function(results) {
         if (emp_calc) {
             break
         }
-
-        dist <- readline(prompt = "For probability calculation, enter t for t distribution, or n for normal distribution: ")
+        
+        cat("For probability calculation, enter:\n")
+        cat("   t for t distribution\n")
+        cat("   n for normal distribution\n")
+        cat("   p for poisson distribution\n")
+        cat("   ? for more info\n")
+        cat("   q to exit\n")
+        dist <- readline(prompt = "Enter command: ")
         if (dist == 't') {
             calc_pr_t(moments)
-            break
         } else if (dist == 'n') {
             calc_pr_n(moments)
+        } else if (dist == 'p') {
+            calc_pr_pois(moments)
+        } else if (dist == '?') {
+            print_dist_help()
+        } else if (dist == 'q') {
             break
         } else {
             cat("Error: did not recognise distribution. Please try again\n")
@@ -75,7 +85,10 @@ full_calc_pr <- function(results) {
     }
 }
 
-
+# prints information about the possible distributions
+print_dist_help <- function() {
+    
+}
 
 # Takes 1 player name, and returns any wanted statistics
 get_player_stats <- function(player_stats) {
@@ -283,6 +296,35 @@ calc_pr_n <- function(moments) {
                     sd = sqrt(moments[which(moments[[1]] == stat), "variance"]), 
                     lower.tail = FALSE)
             fair_odds <- prob^-1
+
+            cat("Probability of", stat, "exceeding", num, "is", prob, "// Fair odds are", fair_odds, "\n")
+        } else {
+            cat("Couldn't find statistic\n")
+        }
+    }
+}
+
+# Assume a Poisson distribution for our data,
+calc_pr_pois <- function(moments) {
+    if (length(moments) == 0) {
+        cat("\n>> Data entry unsuccessful<<")
+        stop()
+    }
+
+    cat("\n>> Data entry successful and using Poisson distribution << \n")
+    print(moments)
+    cat("\n")
+
+    repeat {
+        stat <- readline(prompt = "Enter statistic/last name of interest ('done' to exit): ")
+        if (tolower(stat) == "done") {
+            break
+        } else if (stat %in% moments$statistic || stat %in% moments$name) {
+            num <- readline(prompt = "Enter minimum value: ")
+            num <- as.integer(num)
+            prob <- ppois(num, lambda = moments[which(moments[[1]] == stat), "average"], lower.tail = FALSE)
+            fair_odds <- prob^-1
+
             cat("Probability of", stat, "exceeding", num, "is", prob, "// Fair odds are", fair_odds, "\n")
         } else {
             cat("Couldn't find statistic\n")
@@ -318,12 +360,14 @@ calc_pr_emp <- function(results) {
     vector <- as.vector(given_player_stats[[stat]])
 
     repeat {
-        num <- readline(prompt = "Enter minimum value ('done' to exit): ")
+        num <- readline(prompt = "Enter minimum value ('done' to exit, 'new' to get new data): ")
 
         if (tolower(num) == "done") {
             break
+        } else if (tolower(num) == 'new') {
+            calc_pr_emp(results)
+            break
         }
-        
 
         num <- as.integer(num)
         total_count <- length(vector)
